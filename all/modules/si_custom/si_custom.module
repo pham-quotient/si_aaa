@@ -1,0 +1,63 @@
+<?php
+/**
+ * @file
+ * Module file for the si module, which creates email and phone fields that are
+ * validated client-side.  It also sets config settings for CKeditor
+ */
+
+
+/**
+ * Implements hook_form_FORM_ID_alter() for the node form.
+ */
+function si_custom_form_node_form_alter(&$form, &$form_state, $form_id) {
+  if ($form['#node']->type == 'slide') {
+
+    // We will autogenerate the title later, just hide the title field in the
+    // meanwhile.
+//    $form['title']['#value'] = 'ant';
+    $form['field_image_wide']['#access'] = FALSE;
+    $form['field_image_tall']['#access'] = FALSE;
+    // $form['info'] = array(
+    //   '#markup' => '<pre>'. print_r($form['#node']) .'</pre>');
+  }
+}
+
+
+/**
+ * Implements hook_node_submit().
+ *
+ * Generate the node title as soon as the form has been submitted. That way
+ * the node preview is shown right too.
+ */
+function si_custom_node_submit($node, $form, &$form_state) {
+  if ($node->type == 'slide' && !empty($form_state['values']['field_image_slide'])) {
+    // $form_state['info_storage'] = $form_state['values'];
+  //   $form_state['rebuild'] = TRUE;
+		$node->field_image_wide = $form_state['values']['field_image_slide'];
+		$node->field_image_tall = $form_state['values']['field_image_slide'];
+    // return;
+  }
+}
+
+/**
+ * Implements hook_node_presave().
+ */
+function si_custom_node_presave($node) {
+  // If not yet done, generate the title now.
+ if ($node->type == 'slide' && !empty($node->field_image_slide)) {
+		$node->field_image_wide = $node->field_image_slide;
+		$node->field_image_tall = $node->field_image_slide;
+  }
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function si_custom_form_alter(&$form, &$form_state, $form_id) {
+  if ($form_id == 'search_block_form') {
+    $form['search_block_form']['#attributes']['placeholder'] = t('Search');
+  }
+  if ($form_id == 'edan_search_search_form') {
+    $form['edan_q']['#attributes']['placeholder'] = t('Search Collections');
+  }
+}
