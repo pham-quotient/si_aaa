@@ -1,0 +1,283 @@
+/**
+ * General Styles
+ */
+
+.edan-record-container {
+  min-height: 575px;
+}
+
+.record-sub-heading {
+  font-weight: bold;
+}
+
+.record-sub-heading p {
+  margin: 0;
+}
+
+/**
+ * Player Interface
+ */
+
+#player {
+  margin-top: 14px;
+}
+
+/**
+ * Left Menu
+ */
+
+.l-region--sidebar-first .menu > li > a, .l-region--left .menu > li > a {
+  display: block;
+  padding: 12px 20px;
+  padding: 1.2rem 2rem;
+  background: #f5865f;
+  color: white;
+  border-bottom: 1px solid white;
+  font-size: 16px;
+  font-size: 1.6rem;
+  line-height: 24px;
+  font-weight: bold;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-shadow: rgba(0, 0, 0, 0.004) 1px 1px 1px;
+  width: 21.73913%;
+  float: left;
+  margin-right: 4.34783%;
+}
+
+.panel-display--two-col .l-region--hero {
+  margin-bottom: 48px;
+  margin-bottom: 4.8rem;
+}
+
+.ead-supplemental-container {
+  display: block;
+  color: white;
+  font-size: 16px;
+  font-size: 1.6rem;
+  line-height: 24px;
+  font-weight: bold;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-shadow: rgba(0, 0, 0, 0.004) 1px 1px 1px;
+  width: 21.73913%;
+  margin-right: 4.34783%;
+  background-color: #1668b3;
+}
+
+.ead-supplemental-container .jump-to {
+  float: left;
+  padding: 10px 20px;
+  background: #1668b3;
+  width: 60%;
+  border-right: 1px solid white;
+}
+
+.ead-supplemental-container .request {
+  float: left;
+  padding: 10px 20px;
+  background: #1668b3;
+  width: 40%;
+}
+
+.ead-supplemental-container .request-select-left {
+  float: left;
+  padding: 10px 20px;
+  background: #1668b3;
+  width: 50%;
+  border-right: 1px solid white;
+  font-size: 1.4rem;
+  text-align: center;
+}
+
+.ead-supplemental-container .request-select-right {
+  float: left;
+  padding: 10px 20px;
+  background: #1668b3;
+  width: 50%;
+  font-size: 1.4rem;
+  text-align: center;
+}
+
+.ead-supplemental-container .request-select-left a,
+.ead-supplemental-container .request-select-left a:visited,
+.ead-supplemental-container .request-select-right a,
+.ead-supplemental-container .request-select-right a:visited {
+  color: #ffffff;
+}
+
+.ead-supplemental-container .request-select-left a:hover,
+.ead-supplemental-container .request-select-right a:hover {
+  color: #76BCFB;
+}
+
+/**
+ * Left Menu Submit Inputs
+ */
+
+.ead-supplemental-container input[type="submit"] {
+  margin: 0;
+  font-weight: bold;
+  white-space: inherit;
+  padding: 0;
+  font-size: 1.5rem;
+  line-height: 1.2;
+  text-transform: none;
+}
+
+.ead-supplemental-container input[type="submit"]:hover,
+.ead-supplemental-container input[type="submit"]:active,
+.ead-supplemental-container input[type="submit"]:visited,
+.ead-supplemental-container input[type="submit"]:focus {
+  background-color: #1668b3;
+  color: #B3DBFF;
+}
+
+.ead-supplemental-container input[type="submit"]:focus {
+  outline-width: 0;
+}
+
+/**
+ * Collection Tags
+ */
+
+ul.edanList {
+  list-style-type: none;
+  margin: 1rem 0 0 0;
+  padding: 0;
+}
+
+ul.edanList li {
+  font-size: 1.35rem;
+}
+
+/**
+ * Tabs
+ */
+
+.edan-extended-tabs {
+  margin-top: 2rem;
+  float: left;
+}
+
+.edan-extended-tab-content-container {
+  border: 1px solid #ddd;
+  width: 100%;
+  display: inline-block;
+  font-weight: 600;
+}
+
+.edan-extended-tab-content {
+  padding: 5rem;
+  float: left;
+  width: 70%;
+}
+
+.edan-extended-collection-tag-content {
+  border-left: 1px solid #ddd;
+  min-height: 45rem;
+  padding: 6rem 3rem 8rem 3rem;
+  float: left;
+  width: 30%;
+}
+
+/**
+ * Image Download Modal
+ */
+
+/*#download-modal {
+  display: none;
+}*/
+
+body.NoScrolling {
+  overflow: hidden;
+}
+
+body.NoScrolling .ui-dialog .ui-widget-header {
+  border: 1px solid #aaa;
+  background-color: #0f606b;
+  background-image: none;
+  background-repeat: inherit;
+  background-position: inherit;
+  color: #FFF;
+  font-weight: 700;
+}
+
+body.NoScrolling .ui-dialog .ui-state-default, .ui-widget-content .ui-state-default, .ui-widget-header .ui-state-default {
+  border: 1px solid #d3d3d3;
+  background-color: #e6e6e6;
+  background-image: none;
+  background-repeat: inherit;
+  background-position: inherit;
+  color: #555;
+  font-weight: 400;
+  font-size: 0.95rem;
+}
+
+body.NoScrolling .ui-widget-overlay {
+  opacity: .8;
+  filter: Alpha(Opacity=80);
+}
+
+body.NoScrolling .ui-corner-all,.ui-corner-top,.ui-corner-left,.ui-corner-tl {
+    border-top-left-radius: 0px;
+}
+
+body.NoScrolling .ui-corner-all,.ui-corner-top,.ui-corner-right,.ui-corner-tr {
+    border-top-right-radius: 0px;
+}
+
+body.NoScrolling .ui-corner-all,.ui-corner-bottom,.ui-corner-left,.ui-corner-bl {
+    border-bottom-left-radius: 0px;
+}
+
+body.NoScrolling .ui-corner-all,.ui-corner-bottom,.ui-corner-right,.ui-corner-br {
+    border-bottom-right-radius: 0px;
+}
+
+body.NoScrolling .ui-button.ui-dialog-titlebar-close {
+  margin-right: 1rem;
+}
+
+.edan-extended-preloader {
+  display: none;
+  float: left;
+  margin-top: 24px;
+  margin-left: 40px;
+}
+
+#download-button-container {
+  display: none;
+  float: left;
+}
+
+.edan-extended-preloader img {
+  width: 30px;
+}
+
+/**
+ * Image Results Grid
+ */
+
+div.single-image-container a {
+  display: inline-block;
+  margin-bottom: 8px;
+  width: calc(42% - 4px);
+  margin-left: 8px;
+  margin-right: 14px;
+}
+
+@media screen and (min-width: 60em) {
+  div.single-image-container a {
+    width: calc(28% - 6px);
+  }
+}
+
+div.single-image-container a figure {
+  display: block;
+  margin: 0px;
+}
+
+div.single-image-container a figure img {
+  vertical-align: text-top;
+}

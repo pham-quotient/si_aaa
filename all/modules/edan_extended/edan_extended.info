@@ -1,0 +1,16 @@
+;$Id$
+name = EDAN Web Services Extended
+description = Provides an additional functionality to the EDAN module.
+; configure = admin/config/services/edanserver
+core = 7.x
+package = EDAN Web Services
+dependencies[] = edan
+dependencies[] = edan_search
+dependencies[] = edan_record
+dependencies[] = aaa_player
+dependencies[] = app_util
+
+; Manually added package info, since we maintain the updates
+version = "7.x-1.4"
+project = "edan"
+; project status url = http://edandocs.dev1.myquotient.net/release-history

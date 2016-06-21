@@ -1,0 +1,163 @@
+div#tree {
+  display: block;
+  width: 21.73%;
+}
+
+div#tree {
+  font-weight: bold;
+}
+
+ul.fancytree-container {
+  overflow: inherit;
+  outline: none;
+  font-size: 1rem;
+  padding: 0px;
+  border-top: none;
+  border-right: 1px solid #C5C5C5;
+  border-top: bottom;
+  border-left: 1px solid #C5C5C5;
+}
+
+ul.fancytree-container ul {
+  padding: 0;
+}
+
+ul.fancytree-container li {
+  border-top: 1px solid #C5C5C5;
+  width: inherit;
+}
+
+.fancytree-node {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+span.fancytree-title {
+  white-space: normal;
+  font-size: 1.1rem;
+  margin: 0;
+  padding: 0 44px 0 0;
+}
+
+span.fancytree-node.querymatch > span.fancytree-title {
+  color: maroon;
+  font-family: "Audiowide";
+}
+
+.fancytree-treefocus span.fancytree-selected span.fancytree-title,
+.fancytree-treefocus span.fancytree-active span.fancytree-title {
+  color: #1668b3;
+  background-color: transparent;
+}
+
+span.fancytree-selected span.fancytree-title,
+span.fancytree-active span.fancytree-title {
+  background-color: transparent;
+}
+
+span.fancytree-focused span.fancytree-title {
+  outline: none;
+}
+
+span.fancytree-selected span.fancytree-title {
+  font-style: normal;
+}
+
+span.fancytree-expanded {
+  background-color: #E4E3E4;
+}
+
+span.fancytree-expanded span.fancytree-title,
+span.fancytree-expanded span.fancytree-title:first-child,
+span.fancytree-expanded span.fancytree-title:first-child + ul li span.fancytree-has-children span.fancytree-title {
+  color: #1668b3;
+}
+
+span:not(.fancytree-has-children) span.fancytree-title,
+span.fancytree-expanded span:not(.fancytree-has-children) span.fancytree-title {
+  color: #1668b3;
+}
+
+span:not(.fancytree-has-children) + ul li span.fancytree-node {
+  background-color: transparent;
+}
+
+span.fancytree-checkbox {
+  float: right;
+  margin-right: 0.85rem;
+}
+
+span.fancytree-custom-icon {
+  display: none;
+}
+
+span.fancytree-node {
+  margin-top: 0;
+  padding-left: 8px;
+  min-height: 47px;
+}
+
+span.fancytree-node + ul li span.fancytree-node,
+span.fancytree-node + ul li span.fancytree-node + ul li span.fancytree-node,
+span.fancytree-node + ul li span.fancytree-node + ul li span.fancytree-node + ul li span.fancytree-node,
+span.fancytree-node + ul li span.fancytree-node + ul li span.fancytree-node + ul li span.fancytree-node + ul li span.fancytree-node {
+  padding-left: 8px;
+}
+
+span.ui-effects-wrapper {
+  margin-left: 8px;
+}
+
+li#custom-error {
+  width: 100%;
+}
+
+li#custom-error span.fancytree-node {
+  padding: 0;
+}
+
+li#custom-error span.fancytree-title {
+  padding: 3rem 0;
+  font-size: 1.2rem;
+  text-align: center;
+  color: #595959;
+  cursor: default;
+  width: 100%;
+}
+
+li#custom-error span.fancytree-checkbox,
+li#custom-error span.fancytree-expander {
+  display: none;
+}
+
+/*span.fancytree-node.padding-level-2 {
+  padding-left: 8px;
+}
+
+span.fancytree-node.padding-level-2 + ul li span.fancytree-node  {
+  padding-left: 8px;
+}
+
+span.fancytree-node.padding-level-3 {
+  padding-left: 16px;
+}
+
+span.fancytree-node.padding-level-3 + ul li span.fancytree-node  {
+  padding-left: 16px;
+}
+
+span.fancytree-node.padding-level-4 {
+  padding-left: 24px;
+}
+
+span.fancytree-node.padding-level-4 + ul li span.fancytree-node  {
+  padding-left: 24px;
+}
+
+span.fancytree-node.padding-level-5 {
+  padding-left: 32px;
+}
+
+span.fancytree-node.padding-level-5 + ul li span.fancytree-node  {
+  padding-left: 32px;
+}*/

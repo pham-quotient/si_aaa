@@ -1,0 +1,41 @@
+/**
+ * General Styles
+ */
+
+.edan-row {
+  width: 100%;
+  float: left;
+}
+
+.edan-row dl dt {
+  border-bottom: 1px solid #E5E5E5;
+  margin-top: 0.75rem;
+  margin-bottom: 0.5rem;
+  font-size: 1.7rem;
+  font-weight: 600;
+}
+
+.edan-row dl dd {
+  margin-bottom: 1.0rem;
+  margin-left: 0.5rem;
+  font-size: 1.5rem;
+}
+
+/**
+ * EDAN Images
+ */
+
+#edan-images {
+  float: left;
+  margin-right: 2rem;
+}
+
+#edan-images ul {
+  list-style: none;
+  margin-left: 0;
+  padding-left: 0;
+}
+
+#edan-data {
+  float: left;
+}

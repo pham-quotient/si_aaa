@@ -1,0 +1,74 @@
+<?php
+/**
+ * Implements hook_install()
+ */
+function edan_extended_install() {
+
+  if(module_exists('menu')) {
+
+    $item = array (
+      'link_title' => 'EDAN Record Menu',
+      'link_path' => 'object/',
+      'router_path' => 'object/%',
+      'menu_name' => 'main-menu',
+      'weight' => 0,
+      'plid' => 0,
+      'hidden' => 1,
+    );
+   
+    $mlid = menu_link_save($item);
+    menu_cache_clear_all();
+
+    if (!empty($mlid)) {
+      $item = array(
+        'menu_name' => 'main-menu',
+        'link_path' => 'object/',
+        'link_title' => 'How to Use this Collection',
+        'weight' => -2,
+        'plid' => $mlid,
+      );
+      menu_link_save($item);
+      menu_cache_clear_all();
+
+      $item = array(
+        'menu_name' => 'main-menu',
+        'link_path' => 'object/',
+        'link_title' => 'Explore & Request Collection',
+        'weight' => -1,
+        'plid' => $mlid,
+      );
+      menu_link_save($item);
+      menu_cache_clear_all();
+    }
+
+  }
+
+}
+
+/**
+ * Implements hook_uninstall()
+ */
+function edan_extended_uninstall() {
+
+  if(module_exists('menu')) {
+
+    $mlid = db_select('menu_links' , 'ml')
+          ->condition('ml.link_title','EDAN Record Menu')
+          ->fields('ml' , array('mlid'))
+          ->execute()
+          ->fetchField();
+
+    db_delete('menu_links')
+      ->condition('plid', (int)$mlid)
+      ->execute();
+
+    menu_link_delete($mlid);
+  }
+}
+
+/**
+ * Implements hook_enable()
+ */
+// function edan_extended_enable() {
+//   //
+// }

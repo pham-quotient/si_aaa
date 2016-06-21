@@ -1,0 +1,1579 @@
+<?php
+/**
+ * EDAN Extended
+ *
+ * @file edan_extended.module
+ * @version 0.1
+ */
+
+/**
+ * Implements hook_menu_alter().
+ */
+function edan_search_menu_alter(&$items) {
+  // Search Results (overriding the EDAN module's page callback)
+  $search_base_path = _edan_search_variable_get('menu_results_page');
+  if (isset($items[$search_base_path])) {
+    $items[$search_base_path]['page callback'] = 'edan_extended_menupage_results';
+  }
+}
+
+/**
+ * Implements hook_menu_alter().
+ */
+function edan_record_menu_alter(&$items) {
+
+  // Record Views (overriding the EDAN module's page callback)
+  $record_view_base_path = _edan_record_variable_get('menu_record_page');
+  if (isset($items[$record_view_base_path])) {
+    $items[$record_view_base_path]['page callback'] = 'edan_extended_menupage';
+    $items[$record_view_base_path]['page arguments'] = array(1, 2);
+  }
+
+  // Aeon Request
+  $items['request/%'] = array(
+    'title' => 'Request',
+    'title callback' => '_edan_extended_request_pagetitle_callback',
+    'page callback' => '_edan_extended_request_page_callback',
+    'page arguments' => array(1),
+    'access arguments' => array('access content'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  // Get EDAN EAD Tree route (AJAX).
+  $items['get_edan_ead_tree/ajax'] = array(
+    'page callback' => '_edan_extended_get_edan_ead_tree',
+    'access arguments' => array('access content'),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK
+  );
+
+  // Get EDAN record (AJAX).
+  $items['get_edan_dams/ajax'] = array(
+    'page callback' => '_edan_extended_get_edan_dams',
+    'access arguments' => array('access content'),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK
+  );
+
+  // Get EDAN record (AJAX).
+  $items['zip_files/ajax'] = array(
+    'page callback' => '_edan_extended_create_zip_archive',
+    'access arguments' => array('access content'),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK
+  );
+
+}
+
+/**
+ * Implements hook_theme().
+ */
+function edan_extended_theme() {
+  return array(
+    'edan_ead_record_page' => array(
+      'template' => 'edan-ead-record-page',
+      'variables' => array(
+        'docs' => array(),
+        'docs_edanead' => array(),
+        'tags' => array(),
+      ),
+    ),
+    'edan_extended_record_page' => array(
+      'template' => 'edan-extended-record-page',
+      'variables' => array(
+        'docs' => array(),
+        'docs_edanead' => array(),
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_theme_registry_alter().
+ *
+ * Override the EDAN module's edan-search-results template.
+ */
+// function edan_extended_theme_registry_alter(&$theme_registry) {
+//   // Override the default edan-search-results.tpl.php with our own.
+//   if (isset($theme_registry['edan_search_results'])) {
+//     $module_path = drupal_get_path('module', 'edan_extended');
+//     $theme_registry['edan_search_results']['theme path'] = $module_path;
+//     $theme_registry['edan_search_results']['template'] = $module_path . '/edan-search-results';
+//   }
+// }
+
+/**
+ * EDAN Search Results menu callback.
+ */
+function edan_extended_menupage_results() {
+
+  $args = _edan_search_get_query();
+  $args['facet'] = TRUE;
+  $args['rows'] = '9';
+
+  // Remove the additional empty OR "" in fq[] - unit_code:("AAA" OR "AAA_Test" OR "")
+  foreach($args['fq'] as $fq_key => $fq_value) {
+    if(stristr($fq_value, ' OR "AAA_Test" OR ""')) {
+      $args['fq'][$fq_key] = str_replace(' OR "AAA_Test" OR ""', '', $fq_value);
+    }
+  }
+
+  drupal_set_title( _edan_search_variable_get('menu_results_title') );
+
+  $f = drupal_get_form('edan_search_search_form');
+  $form = render($f);
+
+  $opts = array(
+    'theme' => array(
+      'show_tabs' => _edan_search_variable_get('menu_results_tabs'),
+      // Pass the custom callback to the EDAN Search module.
+      'custom_callback' => 'edan_extended_search_custom_callback',
+    ),
+    'variables' => array(
+      'results_per_page' => '9',
+    )
+  );
+
+  $content = _edan_search_get_results($args, $opts);
+
+  drupal_set_title('Search Results for "' . filter_xss($args['q']) . '"');
+
+  // Add custom CSS
+  drupal_add_css(
+    drupal_get_path('module', 'edan_extended') . '/css/edan_extended_search.css',
+    array('group' => CSS_THEME, 'type' => 'file', 'weight' => 1)
+  );
+
+  // Add custom Javascript
+  drupal_add_js(
+    drupal_get_path('module', 'si_field_collection') . '/js/jquery.responsiveTabs.js',
+    array('scope' => 'footer', 'weight' => 1)
+  );
+  drupal_add_js(
+    drupal_get_path('module', 'edan_extended') . '/js/edanExtendedSearch.js',
+    array('scope' => 'footer', 'weight' => 2)
+  );
+
+  return $form . $content;
+}
+
+/**
+ * EDAN Search custom callback.
+ */
+function edan_extended_search_custom_callback($vars = array(), $opts = array()) {
+
+  // dumper($vars['docs']);
+
+  $query_params = drupal_get_query_parameters();
+
+  // Expand upon the results_summary variable coming from the EDAN Search module.
+  $page = isset($query_params['page']) ? ((int)$query_params['page'] + 1) : 1;
+  $total_results = $vars['results_summary'];
+  $num_found = $vars['numFound'];
+  $end = $page*$num_found;
+  $start = $end-($num_found-1);
+  $vars['results_summary'] = 'Showing ' . $start . ' - ' . $end . ' of ' . $total_results . ' result(s).';
+
+  // Facet Filter Menus
+  // Process URL
+  $url = '?' . drupal_http_build_query($query_params);
+  // Process Facet Filters
+  $filters = _edan_extended_process_facet_filters( $vars['facets_raw'], $url );
+  // Render Filter Menus
+  $vars['filter_menus'] = _edan_extended_render_filter_menus( $filters );
+
+  // Set up the background_style and grid_3_region_class variables for the template.
+  foreach ($vars['docs'] as $doc_key => $doc_value) {
+
+    // Set the image background, if there's an acceptable one to display.
+    $background_style = '';
+    $ids_url = 'https://ids.si.edu/ids/deliveryService/?id=';
+    $image_blacklist = array(
+      'http://sirismm.si.edu/siris/FullyDigitized.gif',
+      'http://sirismm.si.edu/siris/thbtrans.gif',
+      'http://sirismm.si.edu/siris/sound.gif',
+    );
+
+    if(!empty($doc_value['content']['descriptiveNonRepeating'])
+        && !empty($doc_value['content']['descriptiveNonRepeating']['online_media'])
+        && (int)$doc_value['content']['descriptiveNonRepeating']['online_media']['mediaCount']) {
+      $thumbnail_image = $doc_value['content']['descriptiveNonRepeating']['online_media']['media'][0]['thumbnail'];
+      $full_image = str_replace('/thumbnail/', '/reference/', $thumbnail_image);
+      // Set the style attribute value.
+      $background_style = !in_array($full_image, $image_blacklist) 
+          ? 'background: #000 url(' . $ids_url . $full_image . '?max_w=500) no-repeat center center;' : '';
+    }
+
+    // Establish the CSS class for the grid item.
+    switch($doc_key) {
+      case 0:
+      case 3:
+      case 6:
+        $grid_3_region_class = 'first clearfix';
+        break;
+      case 1:
+      case 4:
+      case 7:
+        $grid_3_region_class = 'second';
+        break;
+      case 2:
+      case 5:
+      case 8:
+        $grid_3_region_class = 'third';
+        break;
+    }
+
+    // TODO: The setting of the local_record_link is temporary.
+    // AAA would like all of their URLs to match their current website.
+    // Examples:
+    // /collections/betty-parsons-gallery-records-and-personal-papers-7211
+    // /collections/interviews/oral-history-interview-mark-adams-and-beth-van-hoesen-12674
+    // /collections/items/detail/l-brent-kington-his-workshop-1134
+    $base_record_url = url(_edan_record_variable_get('menu_record_page'), array('absolute' => true, 'alias' => false ));
+    $vars['docs'][$doc_key]['local_record_link'] = $base_record_url . '/' . $doc_value['type'] . '/'. str_replace($doc_value['type'] . '-', '', $doc_value['id']) . '/';
+
+    // Get the record title.
+    $vars['docs'][$doc_key]['record_title'] = app_util_get_title( $vars['docs'][$doc_key] );
+
+    $vars['docs'][$doc_key]['background_style'] = $background_style;
+    $vars['docs'][$doc_key]['grid_3_region_class'] = $grid_3_region_class;
+  }
+
+  return theme('edan_search_results', $vars);
+
+}
+
+/**
+ * Manage Aeon requests page callback.
+ */
+function _edan_extended_request_page_callback($request = '') {
+  $callback_file = '';
+  $output = '';
+  $title = 'Requests Default Page';
+
+  $types = _edan_extended_request_types();
+  $title = $types[$request];
+
+  // Output
+  drupal_set_title($title);
+
+  $path_to_includes = drupal_get_path('module', 'edan_extended') . '/includes/';
+  $callback_file = 'edan_extended_request.inc';
+
+  if (file_exists($path_to_includes . $callback_file)) {
+    // Add CSS
+    drupal_add_css(
+      drupal_get_path('module', 'edan_extended') . '/css/edan_extended_request.css',
+      array('group' => CSS_THEME, 'type' => 'file', 'weight' => 50)
+    );
+    // Include the callback file.
+    include($path_to_includes . $callback_file);
+  } else {
+    return MENU_NOT_FOUND;
+  }
+
+  return $output;
+}
+
+/**
+ * Process Aeon request type titles.
+ */
+function _edan_extended_request_pagetitle_callback($request = FALSE) {
+  $types = _edan_extended_request_types();
+
+  if(!isset($types[$request])) {
+    return '';
+  }
+
+  return $types[$request];
+}
+
+/**
+ * Aeon request types.
+ */
+function _edan_extended_request_types() {
+  return array(
+    'viewing' => 'Collection Viewing Appointment Request',
+    'reproduction' => 'Collection Reproduction Order Request',
+  );
+}
+
+/**
+ * Build Record Menu
+ */
+function _edan_extended_build_record_menu($menu) {
+
+  $children = menu_build_tree($menu);  
+  foreach($children as $child) {
+    if($child['link']['link_title'] === 'EDAN Record Menu') {
+      $menu = $child['below'];
+    }
+  }
+
+  $i = 0;
+  foreach($menu as $menu_key => $menu_value) {
+    if($i !== 0) {
+      $menu[$menu_key]['link']['link_path'] = current_path() . '/';
+      $menu[$menu_key]['link']['href'] = current_path(). '/';
+      $menu[$menu_key]['link']['in_active_trail'] = true;
+      $menu[$menu_key]['link']['options']['item_attributes']['class'] = 'active';
+      $menu[$menu_key]['link']['localized_options']['item_attributes']['class'] = 'active';
+    }
+    $i++;
+  }
+
+  return $menu;
+}
+
+/**
+ * Add EAD Sidebar
+ */
+function _edan_extended_add_ead_sidebar( $menu_ead_tree, $dams_paths_array = array() ) {
+
+  // two-col-left begins
+  // $out = '<div class="two-col-left panel-display panel-display--two-col">' . "\n";
+  // For spacing - matches other pages
+  // $out .= '<div class="l-region--hero"></div>' . "\n";
+  // Left menu begins
+  // $out .= '<div class="l-region--left">' . "\n";
+  $out .= '<div class="l-region l-region--sidebar-first">' . "\n";
+
+  $out .= '<nav id="block-menu-block-8" role="navigation" class="block block--menu-block contextual-links-region block--menu-block-8">' . "\n";
+  $out .= '<div class="menu-block-wrapper menu-block-8 menu-name-main-menu parent-mlid-0 menu-level-2">' . "\n";
+
+  // Search and Browse the Collections / Explore & Request Collection
+  $out .= render($menu_ead_tree) . "\n";
+  // Jump To / Request container
+  $out .= '<div class="ead-supplemental-container">' . "\n";
+  $out .= '<div class="jump-to">Jump To</div>' . "\n";
+  $out .= '<div class="request">Request</div>' . "\n";
+  $out .= '</div>' . "\n";
+  if(!empty($dams_paths_array)) {
+    // EAD Menu Tree
+    $out .= '<form id="request" action="/request" method="POST">' . "\n";
+    $out .= '<div id="tree" style="float: left;">' . "\n" . '</div>' . "\n";
+  } else {
+    // Display a "no DAMS images" message
+    $out .= '<div class="ead-supplemental-container">' . "\n";
+    $out .= '<div class="jump-to" style="background-color: #777; width: 100%; border-top: 1px solid #fff; border-bottom: 1px solid #fff; border-right: none; font-size: 1.2rem;">Note: This record is digitized, but is missing paths to DAMS images.<br><span style="">(Check the XML reference to the right)</span></div>' . "\n";
+    $out .= '</div>' . "\n";
+  }
+  // Reading Room and Reproduction Request container
+  $out .= '<div class="ead-supplemental-container">' . "\n";
+  $out .= '<div class="request-select-left"><input id="viewing" class="aaa_request" type="submit" value="Reading Room Request"></div>' . "\n";
+  $out .= '<div class="request-select-right"><input id="reproduction" class="aaa_request" type="submit" value="Reproduction Request"></div>' . "\n";
+  $out .= '</div>' . "\n";
+  $out .= '</form>' . "\n";
+
+   $out .= '</nav>' . "\n";
+    $out .= '</div>' . "\n";
+
+  // Left menu ends
+  $out .= '</div>' . "\n";
+  // two-col-left ends
+  // $out .= '</div>' . "\n";
+  // dumper($out);
+  drupal_add_region_content('sidebar_first', $out);
+}
+
+/**
+ * Add Oral Transcript Sidebar
+ */
+function _edan_extended_add_non_ead_sidebar( $menu_ead_tree ) {
+
+  // two-col-left begins
+  $out = '<div class="two-col-left panel-display panel-display--two-col">' . "\n";
+  // For spacing - matches other pages
+  $out .= '<div class="l-region--hero"></div>' . "\n";
+  // Left menu begins
+  $out .= '<div class="l-region--left">' . "\n";
+  // How to Use this Collection / Explore & Request Collection
+  $out .= render($menu_ead_tree) . "\n";
+  $out .= '<div class="ead-supplemental-container">' . "\n";
+  $out .= '<div class="jump-to" style="width: 100%; border-bottom: 1px solid #fff; border-right: none;">Make a Request</div>' . "\n";
+  $out .= '</div>' . "\n";
+  // Jump To / Request container
+  $out .= '<div class="ead-supplemental-container">' . "\n";
+  $out .= '<div class="request-select-left"><input id="viewing" class="aaa_request" type="submit" value="Reading Room Request"></div>' . "\n";
+  $out .= '<div class="request-select-right"><input id="reproduction" class="aaa_request" type="submit" value="Reproduction Request"></div>' . "\n";
+  $out .= '</div>' . "\n";
+  $out .= '</form>' . "\n";
+  // Left menu ends
+  $out .= '</div>' . "\n";
+  // two-col-left ends
+  $out .= '</div>' . "\n";
+  // dumper($out);
+  drupal_add_region_content('sidebar_first', $out);
+}
+
+/**
+ * Use QUOTIENTTEST
+ */
+function _edan_extended_use_quotienttest() {
+  variable_set('edan_server_url', 'http://edandev.si.edu/');
+  variable_set('edan_auth_key', 'testing1234');
+  variable_set('edan_tier_type', '1');
+  variable_set('edan_app_id', 'QUOTIENTTEST');
+}
+
+/**
+ * Use AAA
+ */
+function _edan_extended_use_aaa() {
+  variable_set('edan_server_url', 'http://edan-new.si.edu/');
+  variable_set('edan_auth_key', 'bf16779c9f877b94909dc7ed000b48ca1f09c4573');
+  variable_set('edan_tier_type', '1');
+  variable_set('edan_app_id', 'AAA');
+}
+
+/**
+ * Record View menu callback
+ */
+function edan_extended_menupage($record_type = NULL, $record_id = NULL) {
+
+  if (empty($record_type) || empty($record_id)) {
+    return MENU_NOT_FOUND;
+  }
+
+  // $path = drupal_get_path('module', 'edan_extended') . '/temp/';
+
+  // if ($handle = opendir($path . 'images/'))
+  // {
+  //     // Add all files inside the directory
+  //     while (false !== ($entry = readdir($handle)))
+  //     {
+         
+
+  //         if ($entry != "." && $entry != ".." && !is_dir('images/' . $entry))
+  //         {
+  //             dumper($entry);
+  //             $zip->addFile('images/' . $entry);
+  //         }
+  //     }
+  //     closedir($handle);
+  // }
+
+
+  // $fields = array(
+  //   'topic',
+  //   'object_type',
+  // );
+  // $facets = _edan_extended_get_facets($fields);
+
+  // dumper($facets);
+
+  $result = $result_edanead = $display_data = $dams_paths_array = $tags = $summary = $images = array();
+
+  // Query for a single record.
+  $params = array('url' => $record_type . ":" . $record_id);
+  $result = _edan_call_edan('getContent', $params);
+  $result['set_name_fq'] = '';
+
+  // dumper(menu_get_router());
+  // dumper($result);
+
+  // Set the AAA record type.
+  if(!empty($result['content']['freetext']['objectType'][0]['content'])) {
+    $result['aaa_record_type'] = $result['content']['freetext']['objectType'][0]['content'];
+  } else {
+    $result['aaa_record_type'] = $result['content']['freetext']['objectType'][1]['content'];
+  }
+
+  // Set the title and bread brumb.
+  $record_title = app_util_get_title($result);
+  drupal_set_title($record_title);
+
+  // Process freetext and return a list of 'tags'.
+  $tags = _edan_extended_process_tags($result);
+
+  // Query for a corresponding edanead record.
+  $args = array(
+    'q' => $record_id,
+    'rows' => '1',
+    'fq' => array('type:"edanead"'),
+    'facet' => TRUE,
+  );
+
+  $content = executeEdanSearch($args);
+  $result_edanead = ($content['numFound'] !== 0) ? $content['items'][0]['content'] : array();
+
+  // dumper($result_edanead['Digital_Assets_Available']);
+
+  // Dumps
+  if(isset($_GET['dump'])) {
+    // Get and unset any messages from the EDAN module.
+    drupal_get_messages();
+    // Set up the EAD record, if available.
+    $ead_dump = !empty($result_edanead) ? '<hr><p><a href="#record">Back to Top</a></p><a name="ead"></a>' . '<h3>"EDANEAD" Record</h3><p>EDAN ID: ' . $result_edanead['record_ID'] . '</p><pre>' . var_export($result_edanead, TRUE) . '</pre>' : '';
+    $ead_link = !empty($result_edanead) ? '<p><a href="#ead">View EAD Record</a></p>' : '';
+    drupal_set_message( $ead_link . '<a name="record"></a><h3>"' . strtoupper($result['type']) . '" Record</h3><p>EDAN ID: ' . $result['id'] . '</p><pre>' . var_export($result, TRUE) . '</pre>' . $ead_dump );
+  }
+
+  // (1) If an ead record is found, set the id. (2) Load required CSS and Javascript.
+  if(!empty($result_edanead)) {
+
+    $result_edanead['ead_id'] = $content['items'][0]['id'];
+
+    // Transform XML
+    $transformed_xml = _edan_extended_get_ead_xml($result_edanead['filelocation']);
+    // Add $transformed_xml[''] as JSON to the output.
+    if($transformed_xml) {
+      drupal_add_js( array('ead_xml_data' => json_encode($transformed_xml['ead_xml_data'])), 'setting' );
+    }
+    // Process display data for the page body.
+    $display_data = _edan_extended_process_ead_display_data( $result, $result_edanead );
+
+    // Determine if there are valid DAMS paths to build the AAA Viewer.
+    foreach ($transformed_xml['ead_xml_data'] as $xkey => $xvalue) {
+      if(stristr($xvalue['data-damspath-1'], 'CollectionsOnline')) {
+        // $dams_paths_array[] = $xvalue['data-damspath-1'];
+        $dams_paths_array[] = urlencode($xvalue['data-damspath-1']);
+      }
+    }
+
+    // dumper($dams_paths_array);
+
+    // If there are DAMS paths present, load the EAD Fancytree and AAA Viewer CSS and Javascript.
+    if(!empty($dams_paths_array)) {
+      _edan_extended_get_ead_viewer_css_and_js($result_edanead);
+    }
+
+    // Load the Record-based CSS and Javascript.
+    _edan_extended_get_css_and_js();
+
+  } else {
+
+    // Get the summary for the record view.
+    $summary = app_util_freetext_processor($result, FALSE);      
+    $summary = array_values($summary);
+
+    // Process display data for the page body.
+    $display_data = _edan_extended_process_display_data( $summary );
+
+    // Get the record's images.
+    $images = app_util_get_edanmdm_images($result);
+    // Re-process AAA's thumbs to full size.
+    $images = (isset($images['record_images']) && !empty($images['record_images'])) ? _edan_extended_thumbs_to_fullsize($images) : array();
+
+    // Query for images if none are included in the initial result.
+    $result['set_name_fq'] = '';
+    if(empty($images)) {
+
+      // Get the setName.
+      $set_name = '';
+      foreach ($summary as $skey => $svalue) {
+        if($svalue['facet'] === 'setName') {
+          foreach ($svalue['values'] as $sk => $sv) {
+            $set_name = $sv['values'][0];
+          }
+        }
+      }
+
+      // Set the fq for the AAA Viewer.
+      if(!empty($set_name)) {
+
+        // Search EDAN against the setName.
+        $args = array(
+          'q' => 'p.edanmdm.freetext.setname.content:"' . strip_tags($set_name) . '"',
+          'rows' => '100',
+          'fq' => array('online_media_type:Images'),
+          'facet' => TRUE,
+        );
+
+        $setname_result = executeEdanSearch($args);
+        $sn = ($setname_result['numFound'] !== 0) ? $setname_result['items'][0]['content'] : array();
+
+        if(!empty($sn)) {
+          $result['set_name_fq'] = 'fq:%22' . strip_tags($set_name) . '%22';
+          $images = TRUE;
+          // Create the array of images.
+          // if(!empty($image_records)) {
+          //   foreach ($image_records as $irkey => $irvalue) {
+          //     $images_array = app_util_get_edanmdm_images($irvalue);            
+          //     $images = array_merge_recursive($images, $images_array);
+          //   }
+          // }
+        }
+
+      }
+
+    }
+
+    // // If the record is an Oral History (Interview), get the transcript.
+    // // http://aaa.geekt.in/object/edanmdm/siris_arc_212084/
+    // // http://aaa.geekt.in/object/edanmdm/siris_arc_216033/
+    // if(($result['aaa_record_type'] === 'Interviews') || ($result['aaa_record_type'] === 'Sound recordings')) {
+    //   $transcript_id = '';
+    //   $transcript_html = '';
+    //   foreach ($summary as $skey => $svalue) {
+    //     if($svalue['facet'] === 'identifier') {
+    //       foreach ($svalue['values'] as $sk => $sv) {
+    //         $transcript_id = str_replace('AAA ', '', $sv['values'][1]);
+    //       }
+    //     }
+    //   }
+    //   if(!empty($transcript_id)) {
+
+    //     $transcript_html = '/collections/oralhistories/transcripts/' . $transcript_id;
+
+    //     $protocol = 'http://';
+    //     if((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || $_SERVER['SERVER_PORT'] == 443) {
+    //       $protocol = 'https://';
+    //     }
+
+    //     // dumper($protocol . $_SERVER['SERVER_NAME'] . $transcript_html);
+
+    //     $html = file_get_contents($protocol . $_SERVER['SERVER_NAME'] . $transcript_html);
+    //     dumper($html);
+    //   }
+    // }
+
+    // Process metadata fields, coming from the user's entries in the 'AAA Viewer Settings' interface.
+    $metadata_fields_array = explode(PHP_EOL, variable_get('aaa_player_metadata_fields'));
+    foreach($metadata_fields_array as $metadata_field) {
+      $trimmed_metadata_fields[] = trim($metadata_field, "\r");
+    }
+    $result['metadata_fields'] = json_encode($trimmed_metadata_fields);
+
+    // Add the Oral Transcript sidebar.
+    $oral_transcript = false;
+    foreach ($summary as $summary_key => $summary_value) {
+      if($summary_value['facet'] === 'objectType') {
+        foreach ($summary_value['values'] as $sval_key => $sval_value) {
+          if(in_array('Interviews', $sval_value['values'])) {
+            $oral_transcript = true;
+          }
+        }
+      }
+    }
+
+    // Load Viewer-based CSS and Javascript
+    if(($result_edanead['Digital_Assets_Available'] === 'true') || !empty($images)) {
+      _edan_extended_get_ead_viewer_css_and_js($result_edanead);
+    }
+    // Load the Record-based CSS and Javascript
+    _edan_extended_get_css_and_js();
+
+  }
+
+  // Variables for the theme.
+  $vars = array(
+    'docs' => $result,
+    'docs_edanead' => $result_edanead,
+    'display_data' => $display_data,
+    'tags' => $tags,
+    'summary' => $summary,
+    'images' => $images,
+  );
+
+  // Set up for the menu.
+  $menu = 'main-menu';
+  $menu_altered = _edan_extended_build_record_menu($menu);
+  $menu_config = menu_block_get_config($menu);
+  $menu_ead_tree = menu_block_tree_output($menu_altered, $menu_config);
+
+  if(!empty($result_edanead)) {
+
+    // Add the EAD sidebar.
+    _edan_extended_add_ead_sidebar( $menu_ead_tree, $dams_paths_array );
+    return theme('edan_ead_record_page', $vars);
+
+  } else {
+
+    // Add the sidebar.
+    _edan_extended_add_non_ead_sidebar( $menu_ead_tree );
+
+    // echo '<h1>UNDER CONSTRUCTION</h1>';
+    // echo '<h3>' . $record_title . '</h3>';
+    // echo '<p>This record page scenario is currently being built-out.</p>';
+    // die();
+
+    return theme('edan_extended_record_page', $vars);
+
+  }
+    
+}
+
+/**
+ * Process EAD display data.
+ */
+function _edan_extended_process_ead_display_data($docs, $docs_edanead) {
+
+  $display_data = array();
+
+  // All Collection_Notes fields.
+  // 'controlaccess'
+  // 'creation'
+  // 'scopecontent'
+  // 'relatedmaterial'
+  // 'userestrict'
+  // 'accessrestrict'
+  // 'prefercite'
+  // 'separatedmaterial'
+  // 'acqinfo'
+  // 'processinfo'
+  // 'bioghist'
+  // 'arrangement'
+  // 'altformavail'
+  // 'abstract'
+  // 'note'
+
+  $data_targets = array(
+    'abstract', // Overview
+    'acqinfo', // More Information
+    'relatedmaterial', // More Information
+    'processinfo', // More Information
+    'scopecontent', // More Information
+    'bioghist', // More Information
+    'arrangement', // More Information
+    'accessrestrict', // How to Use this Collection, bullet 1
+    'altformavail', // How to Use this Collection, bullet 2
+    'separatedmaterial', // How to Use this Collection, bullet 3
+  );
+
+  $notes = isset($docs_edanead['Collection_Notes']) ? $docs_edanead['Collection_Notes'] : $docs_edanead['Child_Notes'];
+
+  foreach($notes as $nkey => $nvalue) {
+    switch(in_array($nvalue['ead'], $data_targets)) {
+      case $nvalue['ead']:
+        $data_target_values[$nvalue['ead']] = $nvalue['content'];
+        break;
+    }
+  }
+
+  // Get the Biographical/Historical Note from edanmdm's freetext.
+  foreach($docs['content']['freetext']['notes'] as $n_key => $n_value) {
+    if($n_value['label'] == 'Notes') {
+      $boig_hist_note = $n_value['content'];
+      break;
+    }
+  }
+
+  // Fix the formatting of the 'altformavail' field.
+  // Remove line breaks, multiple spaces, and spaces before periods.
+  if(isset($data_target_values['altformavail'])) {
+    $data_target_values['altformavail'] = str_replace("\n", ' ', $data_target_values['altformavail']);
+    $data_target_values['altformavail'] = preg_replace('!\s+!', ' ', $data_target_values['altformavail']);
+    $data_target_values['altformavail'] = preg_replace('/\s+(?=[\.,])/', '', $data_target_values['altformavail']);
+  }
+
+  $display_data = array(
+    'Overview' => array(
+      'Collection Information' => array(
+        'Collection Size' => isset($docs_edanead['coll_size']) ? $docs_edanead['coll_size'] : '',
+        'Collection Summary' => isset($data_target_values['abstract']) ? $data_target_values['abstract'] : '',
+      ),
+      'Biographical/Historical Note' => $boig_hist_note,
+      'Provenance' => isset($data_target_values['acqinfo']) ? $data_target_values['acqinfo'] : '',
+      'Related Materials' => isset($data_target_values['relatedmaterial']) ? $data_target_values['relatedmaterial'] : '',
+      'Funding' => isset($data_target_values['processinfo']) ? $data_target_values['processinfo'] : '',
+    ),
+    'More Information' => array(
+      'Scope and Contents' => isset($data_target_values['scopecontent']) ? $data_target_values['scopecontent'] : '',
+      'Biographical Information' => isset($data_target_values['bioghist']) ? $data_target_values['bioghist'] : '',
+      'Arrangement' => isset($data_target_values['arrangement']) ? $data_target_values['arrangement'] : '',
+    ),
+    'How to Use this Collection' => array(
+      0 => isset($data_target_values['accessrestrict']) ? $data_target_values['accessrestrict'] : '',
+      1 => isset($data_target_values['altformavail']) ? preg_replace('!\s+!', ' ', $data_target_values['altformavail']) : '',
+      2 => isset($data_target_values['separatedmaterial']) ? $data_target_values['separatedmaterial'] : '',
+      3 => isset($docs['content']['freetext']['objectRights']) ? $docs['content']['freetext']['objectRights'][0]['content'] : '',
+    ),
+  );
+
+  return $display_data;
+
+}
+
+/**
+ * Process non-EAD record display data.
+ */
+function _edan_extended_process_display_data($summary = array()) {
+
+  // dumper($summary);
+
+  $display_data = array();
+
+  if(!empty($summary)) {
+
+    $data_targets = array(
+      'physicalDescription', // Overview - Collection Information
+      'notes', // Overview - Collection Information (notes => Summary)
+      'notes', // Overview - Biographical/Historical Note (notes => Notes)
+      'objectRights', // How to Use this Collection
+    );
+
+    foreach($summary as $summary_item) {
+      if(in_array($summary_item['facet'], $data_targets)) {
+        foreach($summary_item['values'] as $key => $value) {
+          foreach($value['values'] as $k => $val) {
+            $data_target_values[$value['label']] = $val;
+          }
+        }
+      }
+    }
+
+    $display_data = array(
+      'Overview' => array(
+        'Collection Information' => array(
+          'Collection Size' => isset($data_target_values['Physical Description']) ? $data_target_values['Physical Description'] : '',
+          'Collection Summary' => isset($data_target_values['Summary']) ? $data_target_values['Summary'] : '',
+        ),
+        'Biographical/Historical Note' => isset($data_target_values['Notes']) ? $data_target_values['Notes'] : '',
+        // 'Provenance' => isset($data_target_values['acqinfo']) ? $data_target_values['acqinfo'] : '',
+        // 'Funding' => isset($data_target_values['processinfo']) ? $data_target_values['processinfo'] : '',
+      ),
+    );
+
+    $display_data['How to Use this Collection'] = isset($data_target_values['Restrictions']) ? $data_target_values['Restrictions'] : '';
+
+  }
+
+  return $display_data;
+
+}
+
+/**
+ * Re-process AAA's thumbs to full size
+ */
+function _edan_extended_thumbs_to_fullsize($images = false) {
+
+  $data = array();
+  $data['record_images'] = array();
+
+  // Preserve all_image_ids.
+  $data['all_image_ids'] = $images['all_image_ids'];
+
+  if(!empty($images['record_images'])) {
+
+    // Fields to perform the replacement on.
+    $fields = array(
+      'thumbnail',
+      'idsId',
+      'medium_size',
+      'regular_size',
+      'gallery_size',
+      'full_size',
+    );
+
+    foreach($images['record_images'] as $image_key => $image_value) {
+      if(in_array($image_key, $fields)) {
+        $data['record_images'][] = str_replace('/thumbnail/', '/fullsize/', $image_value);
+      }
+    }
+
+  }
+
+  return $data;
+}
+
+/**
+ * Load Non-EAD Record-based CSS and Javascript
+ */
+// function _edan_extended_get_record_css_and_js() {
+//   // CSS
+//   drupal_add_css(
+//     drupal_get_path('module', 'edan_extended') . '/css/edan_extended_ead.css',
+//     array('group' => CSS_THEME, 'type' => 'file', 'weight' => 1)
+//   );
+//   drupal_add_css(
+//     drupal_get_path('module', 'edan_extended') . '/css/edan_extended_record.css',
+//     array('group' => CSS_THEME, 'type' => 'file', 'weight' => 2)
+//   );
+// }
+
+/**
+ * Load Record-based CSS and Javascript
+ */
+function _edan_extended_get_css_and_js() {
+  // Javascript
+  drupal_add_js(
+    drupal_get_path('module', 'si_field_collection') . '/js/jquery.responsiveTabs.js',
+    array('scope' => 'footer', 'weight' => 1)
+  );
+  drupal_add_js(
+    drupal_get_path('module', 'edan_extended') . '/js/edanExtended.js',
+    array('scope' => 'footer', 'weight' => 2)
+  );
+
+  // jQueryUI
+  drupal_add_library('system','ui.dialog');
+
+  // CSS
+  drupal_add_css(
+    drupal_get_path('module', 'edan_extended') . '/css/edan_extended_ead.css',
+    array('group' => CSS_THEME, 'type' => 'file', 'weight' => 3)
+  );
+}
+
+/**
+ * Load EAD Fancytree and AAA Viewer CSS and Javascript
+ */
+function _edan_extended_get_ead_viewer_css_and_js( $ead = array() ) {
+
+  // Javascript
+  drupal_add_js(
+    drupal_get_path('module', 'aaa_player') . '/buildPlayer.jquery.js', 
+    array('scope' => 'footer', 'weight' => 3)
+  );
+
+  // Include Fancytree assets only for EAD records.
+  if(!empty($ead)) {
+    drupal_add_js(
+      drupal_get_path('module', 'edan_extended') . '/js/jquery.fancytree.js', 
+      array('scope' => 'footer', 'weight' => 4)
+    );
+  }
+
+  // Include Fancytree assets only for EAD records.
+  if(!empty($ead)) {
+    // drupal_add_js(
+    //   drupal_get_path('module', 'edan_extended') . '/js/jquery.fancytree.wide.js', 
+    //   array('scope' => 'footer', 'weight' => 5)
+    // );
+    drupal_add_js(
+      drupal_get_path('module', 'edan_extended') . '/js/edanTree.js', 
+      array('scope' => 'footer', 'weight' => 6)
+    );
+  }
+
+  drupal_add_js(
+    variable_get('aaa_player_url') . '/build/wellcomeplayer/js/embed.js',
+    array('scope' => 'footer', 'type' => 'external', 'weight' => 7)
+  );
+
+  // CSS
+  // Include Fancytree assets only for EAD records.
+  if(!empty($ead)) {
+    drupal_add_css(
+      drupal_get_path('module', 'edan_extended') . '/css/ui.fancytree.css',
+      array('group' => CSS_THEME, 'type' => 'file', 'weight' => 1)
+    );
+    drupal_add_css(
+      drupal_get_path('module', 'edan_extended') . '/css/fancytree_extras.css',
+      array('group' => CSS_THEME, 'type' => 'file', 'weight' => 2)
+    );
+  }
+
+}
+
+/**
+ * Process URL
+ */
+function _edan_extended_process_url( $query_params = false ) {
+
+  $params = array();
+  $params['edan_local'] = '1';
+  $url_params = '?';
+
+  if(!empty($query_params)) {
+    $params['edan_q'] = !empty($query_params['edan_q']) ? $query_params['edan_q'] : '';
+    $params['edan_local'] = !empty($query_params['edan_local']) ? $query_params['edan_local'] : '1';
+  }
+
+  $url_params = '?' . drupal_http_build_query($params);
+
+  $url = '/' . current_path() . $url_params;
+
+  return $url;
+}
+
+/**
+ * Process Facet Filters
+ */
+function _edan_extended_process_facet_filters( $facets_raw = false, $url = false ) {
+
+  // dumper($url);
+
+  $record_types = array(
+    'Collection descriptions',
+    'Interviews',
+    'Archival materials',
+  );
+
+  // Record Type total
+  $record_type_total = 0;
+  foreach ($facets_raw['object_type'] as $ot_key => $ot_value) {
+    if(in_array($ot_key, $record_types)) {
+      // dumper($ot_value['count'],0);
+      $record_type_total = ($record_type_total+$ot_value['count']);
+    }
+  }
+
+  // dumper($record_type_total);
+  
+  $filters['Record Type']['All (' . $record_type_total . ')'] = $url . '&edan_fq[]=object_type:*';
+
+  if(!empty($facets_raw['object_type']['Collection descriptions'])) {
+    $filters['Record Type']['Collections (' . $facets_raw['object_type']['Collection descriptions']['count'] . ')'] = $url . '&edan_fq[]=object_type:' . urlencode('"Collection descriptions"');
+  }
+
+  if(!empty($facets_raw['object_type']['Interviews'])) {
+    $filters['Record Type']['Oral Histories (' . $facets_raw['object_type']['Interviews']['count'] . ')'] = $url . '&edan_fq[]=object_type:' . urlencode('"Interviews"');
+  }
+
+  if(!empty($facets_raw['object_type']['Archival materials'])) {
+    $filters['Record Type']['Items (' . $facets_raw['object_type']['Archival materials']['count'] . ')'] = $url . '&edan_fq[]=object_type:' . urlencode('"Archival materials"');
+  }
+
+  // Names
+  $filters['Names'] = '';
+
+  // Occupations
+  if(!empty($facets_raw['topic'])) {
+    foreach($facets_raw['topic'] as $topic_key => $topic_value) {
+      if(!empty($topic_value)) {
+        $filters['Occupations'][$topic_key . ' (' . $topic_value['count'] . ')'] = $url . '&edan_fq[]=topic:' . urlencode('"' . $topic_key . '"');
+      }
+    }
+  }
+
+  // Subject
+  if(!empty($facets_raw['culture'])) {
+    foreach($facets_raw['culture'] as $culture_key => $culture_value) {
+      if(!empty($culture_value)) {
+        $filters['Subject'][$culture_key . ' (' . $culture_value['count'] . ')'] = $url . '&edan_fq[]=culture:' . urlencode('"' . $culture_key . '"');
+      }
+    }
+  }
+  if(!empty($facets_raw['place'])) {
+    foreach($facets_raw['place'] as $place_key => $place_value) {
+      if(!empty($place_value)) {
+        $filters['Subject'][$place_key . ' (' . $place_value['count'] . ')'] = $url . '&edan_fq[]=place:' . urlencode('"' . $place_key . '"');
+      }
+    }
+  }
+  if(!empty($facets_raw['date'])) {
+    foreach($facets_raw['date'] as $date_key => $date_value) {
+      if(!empty($date_value)) {
+        $filters['Subject'][$date_key . ' (' . $date_value['count'] . ')'] = $url . '&edan_fq[]=date:' . urlencode('"' . $date_key . '"');
+      }
+    }
+  }
+
+  // Theme
+  if(!empty($facets_raw['set_name'])) {
+    foreach($facets_raw['set_name'] as $sn_key => $sn_value) {
+      if(!empty($sn_value)) {
+        $filters['Theme'][$sn_key . ' (' . $sn_value['count'] . ')'] = $url . '&edan_fq[]=set_name:' . urlencode('"' . $sn_key . '"');
+      }
+    }
+  }
+
+  return $filters;
+
+}
+
+/**
+ * Render Filter Menus
+ */
+function _edan_extended_render_filter_menus( $filters ) {
+
+  $filter_menus = array();
+
+  // Create the links to remove facets.
+  $link = $fq_url_params = '';
+  $base_params = $fq_params = array();
+  $params = drupal_get_query_parameters();
+  $original_params = isset($params['edan_fq']) ? $params['edan_fq'] : '';
+
+  if(isset($params['edan_q']) && isset($params['edan_local'])) {
+    $base_params = array(
+      'edan_q' => $params['edan_q'],
+      'edan_local' => $params['edan_local'],
+    );
+  }
+    
+  $fq_params['edan_fq'] = isset($params['edan_fq']) ? $params['edan_fq'] : '';
+
+  $filter_menus['remove_facets_links'] = '';
+
+  if(!empty($fq_params['edan_fq'])) {
+    $filter_menus['remove_facets_links'] .= '<h5>Remove Faceted Filters</h5>' . "\n";
+    $filter_menus['remove_facets_links'] .= '<ul>' . "\n";
+    foreach($fq_params['edan_fq'] as $fq_key => $fq_value) {
+      // Build-out the fq[] url parameters.
+      if(!empty($fq_params['edan_fq'])) {
+        // Temporarily unset the fq[].
+        unset($fq_params['edan_fq'][$fq_key]);
+        if(!empty($fq_params['edan_fq'])) {
+          // Re-index the edan_fq array.
+          $fq_params['edan_fq'] = array_values($fq_params['edan_fq']);
+          $fq_url_params = '&' . drupal_http_build_query($fq_params);
+        }
+      }
+      // Set the link.
+      $link = '/' . current_path() . '?' . drupal_http_build_query($base_params) . $fq_url_params;
+      // Reset the fq[].
+      $fq_params['edan_fq'] = $original_params;
+      // Format the link text.
+      $facet_string = str_replace(':"', ': ', ucwords($fq_value));
+      $facet_string = str_replace('"', '', $facet_string);
+      $facet_string = str_replace('_', ' ', $facet_string);
+      $filter_menus['remove_facets_links'] .= '<li><a href="' . $link . '" title="Click to remove facet">' . t($facet_string . '&nbsp;&nbsp; x') . '</a></li>' . "\n";
+    }
+    $filter_menus['remove_facets_links'] .= '</ul>' . "\n";
+  }
+
+  // Build the list items and div containers with menus in each.
+  $filter_menus['list_items'] = '<ul>';
+  $filter_menus['divs'] = '';
+  foreach($filters as $fl_key => $fl_value) {
+    $underscored_fl_key = str_replace(' ', '_', strtolower($fl_key));
+    $filter_menus['list_items'] .= '<li><a href="#' . $underscored_fl_key . '">' . ucwords($fl_key) . '</a></li>';
+    $filter_menus['divs'] .= '<div id="' . $underscored_fl_key . '">';
+    // Build the menu items.
+    if(!empty($filters[$fl_key])) {
+      foreach($filters[$fl_key] as $filter_key => $filter_value) {
+        $filter_menus['divs'] .= '<div class="search-menu-item clearfix"><a href="' . $filter_value . '">' . $filter_key . '</a></div>';
+      }
+    }
+    $filter_menus['divs'] .= '</div>';
+  }
+  $filter_menus['list_items'] .= '</ul>';
+
+  return $filter_menus;
+
+}
+
+/**
+ * Get EDAN EAD Tree
+ * Used to load the initial navigation tree and respective children via AJAX calls.
+ */
+function _edan_extended_get_edan_ead_tree( $record_id = false, $ref_id = '' ) {
+
+  // dumper($_GET['recordId']);
+  // dumper($record_id);
+
+  $data = false;
+  $id = !empty($_GET['recordId']) ? $_GET['recordId'] : $record_id;
+  $refId = !empty($_GET['refId']) ? '&refId=' . $_GET['refId'] : $ref_id;
+
+  // dumper($id);
+  // dumper($ref_id);
+
+  if(!empty($id)) {
+
+    // Variables to pass into $edan->sendRequest
+    $uri = 'id=' . $id . $refId;
+    $service = 'ead/v1.0/ead/buildTree.htm';
+    $info = '';
+
+    // dumper($uri);
+    
+    // Instantiate EDANInterface.
+    $edan = edan();
+    $results = $edan->sendRequest($uri, $service, FALSE, $info);
+
+    if($info['http_code'] === 200) {
+      // dumper($uri,0);
+      // dumper($results);
+      // dumper($info);
+      $data = json_decode($results, true);
+      
+      foreach($data as $key => $value) {
+        // Remove the icon
+        $data[$key]['icon'] = '';
+      }
+
+    }
+
+  }
+
+  // TODO: NEED TO SOMEHOW DETERMINE IF THERE ARE VALID ns2:href values containing DAMS paths.
+  // dumper($data);
+
+  // Catch if the $data array is empty.
+  if(empty($data)) {
+    // From the documentation: { key: "custom-error", title: "Custom error while lazy loading", lazy: true }
+    $data = array(
+      array(
+        'level' => 'This collection has not<br>been processed yet.<br><span style="color: #757575; font-weight: normal;">EDAN ID:<br>' . $id . '</span>',
+        'key' => 'custom-error',
+        'title' => 'EDAN id: ' . $id,
+        'lazy' => false,
+      )
+    );
+  }
+
+  drupal_json_output($data);
+  exit;
+
+}
+
+/**
+ * Get EDAN DAMS
+ * Used to load DAMS images, so they can be offered as downloads.
+ */
+function _edan_extended_get_edan_dams( $query = false ) {
+
+  $data = array();
+  $uri = !empty($_GET['query']) ? $_GET['query'] : $query;
+
+  // dumper($uri);
+
+  if(!empty($uri)) {
+    // Query for the DAMS records corresponding to a DAMS path.
+    $args = array(
+      'q' => '*:*',
+      'rows' => '100',
+      'fq' => array('p.damsmdm.path_string:"' . $uri . '"'),
+    );
+    $content = _edan_search_execute_search($args);
+    $result = ($content['numFound'] !== 0) ? $content['items'] : array();
+
+    if(!empty($result)) {
+      foreach($result as $key => $value) {
+        $data[] = 'https://ids.si.edu/ids/deliveryService/?id=' . $value['content']['uan'];
+      }
+    }
+
+  }
+
+  if(!empty($_GET['query'])) {
+    drupal_json_output($data);
+    exit;
+  } else {
+    return $data;
+  }
+  
+}
+
+/**
+ * Get EAD XML
+ */
+function _edan_extended_get_ead_xml($source_xml = false) {
+
+  $result = '';
+
+  if($source_xml) {
+
+    $data = _edan_extended_ead_transform($source_xml);
+
+    // echo $data;
+    // die();
+
+    $dom = new DOMDocument();
+    $dom->loadHTML($data);
+
+    // Locate the metadata we need by traversing the list items
+    // in the XML transformation.
+    $lis = $dom->getElementsByTagName('li');
+    $i = 0;
+    foreach ($lis as $li) {
+      foreach ($li->attributes as $attr_key => $attr) {
+        $value = $attr->nodeValue;
+        $values[$i][$attr_key] = $value;
+      }
+      $i++;
+    }
+
+    $ead_xml = array();
+    foreach ($values as $v) {
+      $result['ead_xml_data'][$v['data-parent-ref-id']] = $v;
+    }
+
+  }
+  
+  return $result;
+}
+
+/**
+ * Transform EAD/XML to HTML
+ */
+function _edan_extended_ead_transform($file) {
+
+  $xml_file = simplexml_load_file($file);
+
+  $ead = $xml_file->asXML();
+  $xslt = new XSLTProcessor();
+  $xsl = new DOMDocument;
+  // Set path for xsl stylesheet
+  // $xslt_path = drupal_get_path('module', 'edan_extended') . '/xslt/AAAv2002-HTML.xsl';
+  $xslt_path = drupal_get_path('module', 'edan_extended') . '/xslt/EAD_series.xsl';
+
+  $xsl->load($xslt_path);
+  $xslt->importStyleSheet($xsl);
+  $xml = new DOMDocument;
+  $xml->loadXML($ead);
+  $result = $xslt->transformToXML($xml);
+
+  // echo $result; die();
+  
+  return $result;
+}
+
+/**
+ * Process tags.
+ */
+function _edan_extended_process_tags($record = array()) {
+
+  $unordered_list = '';
+
+  if(!empty($record)) {
+    $metadata_fields = array(
+      'name',
+      // 'date',
+      'place',
+      'topic',
+      'culture',
+      'objectType',
+      //
+      // 'physicalDescription',
+      // 'name',
+      // 'date',
+      // 'galleryLabel',
+      // 'notes',
+      // 'taxonomicName',
+      // 'language',
+      // 'publisher',
+      // 'place',
+      // 'setName', 
+      // 'creditLine',
+      // 'objectRights',
+      // 'identifier',
+      // 'topic',
+      // 'culture',
+      // 'dataSource'
+    );
+
+    $processed_metadata = app_util_freetext_processor($record, $metadata_fields);
+    $list_values = array();
+    foreach($processed_metadata as $key => $value) {
+      foreach($value as $vkey => $vvalue) {
+        if($vkey === 'values') {
+          $list_values = array_merge($list_values, $vvalue[0]['values']);
+        }
+      }
+    }
+    // Sort
+    // natsort($list_values);
+    // Create the unordered list.
+    $unordered_list = _edan_extended_make_list_from_array($list_values, 'edanList', false, false);
+  }
+
+  return $unordered_list;
+}
+
+/**
+ * Make List From Array
+ */
+function _edan_extended_make_list_from_array($array, $class = false, $id = false) {
+
+    $add_class = $class ? ' class="' . $class . '"' : '';
+    $add_id = $id ? ' id="' . $id . '"' : '';
+    $out = '<ul' . $add_class . $add_id . '>';
+
+    foreach($array as $key => $value) {
+      $search_link = '/search/collections?edan_q=' . $value . '&edan_local=1&edan_fq%5B%5D=online_visual_material%3Atrue&op=Search';
+      $out .= '<li><a href="' . $search_link . '">' . $value . '</a></li>';
+    }
+
+    $out .= '</ul>';
+    return $out;
+}
+
+/**
+ * Get facets from EDAN.
+ */
+function _edan_extended_get_facets($fields = array()) {
+
+  // Available facet fields:
+  // type
+  // online_media_type
+  // topic
+  // culture
+  // place
+  // date
+  // object_type
+  // set_name
+  // online_visual_material
+
+  // Relevant AAA facet fields:
+  // topic
+  // object_type
+
+  $data = false;
+
+  if(!empty($fields)) {
+    foreach ($fields as $key => $value) {
+      // It would be nice if there was a start (&start=1001).
+      $uri = 'q=unit_code:AAA&field=' . $value . '&limit=1000';
+      $info = '';
+      // 1. Instantiate the EDANSearch class.
+      // 2. Execute the search and get the result.
+      $edan = edan();
+      $result = $edan->sendRequest(
+         $uri
+        ,'metadata/v1.0/metadata/getFacets.htm'
+        ,FALSE
+        ,$info
+      );
+      $result_array = json_decode($result, TRUE);
+      // dumper($info["http_code"]);
+      $data[$value] = !empty($result_array['facets']) ? $result_array['facets'][$value] : array();
+    }
+  }
+
+  return $data;
+
+}
+
+/**
+ * ZIP files
+ */
+function _edan_extended_create_zip_archive($files = array()) {
+
+  $files = !empty($_POST['files']) ? $_POST['files'] : $files;
+
+  if(!empty($files)) {
+
+    $random_int = mt_rand( 0, 0xffff );
+    $zips_path = drupal_get_path('module', 'edan_extended') . '/temp/zips/';
+    $images_path = drupal_get_path('module', 'edan_extended') . '/temp/images/';
+
+    $zip = new ZipArchive;
+
+    if($zip->open($zips_path . 'images.zip', ZipArchive::CREATE) === TRUE) {
+      // Download the files to the server.
+      foreach($files as $key => $value) {
+        file_put_contents($images_path . 'image' . ($key+1) . '-' . $random_int . '.jpg', fopen($value['path'], 'r'));
+      }
+
+      if($handle = opendir($images_path)) {
+        // Add all files inside the directory
+        while (false !== ($entry = readdir($handle))) {
+          if ($entry != "." && $entry != ".." && !is_dir($images_path . $entry)) {
+            $zip->addFile($images_path . $entry);
+          }
+        }
+        closedir($handle);
+      }
+
+      $close = $zip->close();
+
+      $files = glob($images_path . '*'); // get all file names
+      foreach($files as $file){ // iterate files
+        if(is_file($file))
+          unlink($file); // delete file
+      }
+
+      // return $zips_path . 'images.zip';
+
+      drupal_json_output(array($zips_path . 'images.zip'));
+      exit;
+
+    } else {
+      // TODO: error handling
+      return 'Error';
+    }
+
+  }
+}
+
+/**
+ * Page callback for url-based IDS image downloads.
+ */
+function _edan_extended_download_zip() {
+  // Serve the zip file.
+  $zips_path = drupal_get_path('module', 'edan_extended') . '/temp/zips/';
+  header('Content-Description: File Transfer');
+  header('Content-type: application/octet-stream');
+  header('Content-disposition: attachment; filename=images-' .  mt_rand( 0, 0xffff ) . '.zip');
+  ob_clean();
+  flush();
+  readfile($zips_path . 'images.zip');
+  exit;
+}
+
+/**
+ * Object to Array
+ * Recursively transform objects within an array.
+ */
+function _edan_extended_object_to_array($d) {
+  if (is_object($d))
+    $d = get_object_vars($d);
+
+  return is_array($d) ? array_map(__FUNCTION__, $d) : $d;
+}
+
+/**
+ * Execute EDAN Search
+ */
+function executeEdanSearch($args) {
+
+  $filter = array();
+
+  $uri = "wt=json";
+  $uri_facets = '';
+
+  if (isset($args['q'])) {
+    $uri .= '&q=' . urlencode($args['q']);
+  }
+
+  if (isset($args['rows'])) {
+    $uri .= '&rows=' . $args['rows'];
+  }
+
+  if (isset($args['start'])) {
+    $uri .= '&start=' . $args['start'];
+  }
+
+  if (isset($args['type'])) {
+    $uri .= '&type=' . $args['type'];
+  }
+
+  if (isset($args['type']) && ($args['universal'] == TRUE)) {
+    $uri .= '&universal=true';
+  }
+
+  if (!empty($args['sort'])) {
+    $uri .= '&sort=' . $args['sort'];
+  }
+
+  // iter of fq array
+  $_fqs = array();
+  if (isset($args['fq'])) {
+    foreach ($args['fq'] as $fq) {
+      if (strpos($fq, ':') !== FALSE) {
+        list($name, $value) = explode(':', $fq);
+        $_fqs[] = $name . ':' . $value;
+      }
+    }
+  }
+
+  if (!empty($_fqs)) {
+    $uri .= '&fqs=' . json_encode($_fqs);
+  }
+
+  // Lists
+  if (isset($args['listid'])) {
+    $uri .= 'qt=myListSearch&sl.id=' . $args['listid'];
+  }
+
+  // Facets
+  if (isset($args['facet']) && $args['facet'] === TRUE) {
+    $uri_facets .= '&facet=true';
+  }
+
+  // queryFacet - gets all of the facet totals, regardless of the fq[].
+  if (isset($args['queryFacet']) && $args['queryFacet'] === TRUE) {
+    $uri_facets .= '&queryFacet=true';
+  }
+
+  $service = 'metadata/v1.0/metadata/search.htm';
+
+  // Add facets
+  $uri .= $uri_facets;
+  $info = '';
+
+  $edan = edan();
+  $results = $edan->sendRequest($uri, $service, FALSE, $info);
+
+  if ($info['http_code'] !== 200) {
+    drupal_set_message('Insufficient credentials to query EDAN (' . $info['http_code'] . ').');
+    return FALSE;
+  }
+
+  return json_decode($results, TRUE);
+}
